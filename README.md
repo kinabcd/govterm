@@ -1,50 +1,40 @@
-<h3 align="center">Simple VT-compatible Linux Terminal Emulator</h3>
-<div align="center">
+# govterm
+Simple VT-compatible Linux Terminal Emulator
 
-[![Licence](https://img.shields.io/badge/Licence-Apache-brightgreen)](https://github.com/veops/gin-api-template/blob/main/LICENSE)
+[![Licence](https://img.shields.io/badge/Licence-Apache-brightgreen)](https://github.com/kinabcd/govterm/blob/main/LICENSE)
 [![Golang](https://img.shields.io/badge/go-1.18+-blue)](https://go.dev/dl/)
-</div>
 
 ------------------------------
-
 [中文](README_zh.md)
 
-
 ## Introduction
-**`go-ansiterm`**  is a Linux terminal emulator similar to pyte, specifically designed for the Go language. While retaining the powerful features of pyte, it further adapts to the Go ecosystem.
+**`govterm`** is a pyte-like Linux terminal emulator that simulates a terminal in memory and can be used to parse and process terminal output without the need for an actual physical terminal.
 
-## Use Cases
-In scenarios involving jump servers and other situations that require strict management of user terminal command execution, it's necessary to filter commands before they are executed by the user. In the development stack based on Golang, we haven't found any related open-source libraries. Additionally, some open-source jump server projects do not support command extraction. Therefore, this tool is mainly developed based on practical needs, to solve the problem of extracting commands executed by terminal users.
+Fork from [go-asiterm](https://github.com/veops/go-ansiterm)
 
-## Core Features
+## Core functions
 
-- **Command Extraction**: The core functionality lies in extracting effective information from terminal outputs and echoes, mainly focusing on user command extraction. This feature is extremely useful in jump servers for the convenient extraction and effective filtering of executed commands.
+- **`Screen simulation`** includes a screen emulator that can handle the character stream on the screen, supporting operations such as cursor movement and text scrolling.
 
-- **Screen Simulation**: Includes a screen simulator capable of processing character streams on the screen, supporting operations like cursor movement and text scrolling.
+- **`ANSI control code interpretation`** handles ANSI control code sequence escapes.
 
-- **ANSI Escape Sequences**: Handling various ANSI escape sequences for enhanced terminal interactions.
-
-## How to Require
+## Download
 ```shell
-    go get github.com/veops/go-ansiterm
+go get github.com/kinabcd/govterm
 ```
 
-## Usage Guide
-
+## Use
 ```shell
-# First, create a screen object
-screen := NewScreen(80, 24)
+# Create a virtual screen
+screen := govterm.NewScreen(80, 24)
 
-# Create a stream object
-stream := InitByteStream(screen, false)
+# Create a character stream
+stream := govterm.NewStream(screen)
 
-# Connect the stream object to the screen
-stream.Attach(screen
+# Input characters
+stream.WriteString(input)
 
-# Feed input into the stream object
-stream.Feed(input)
-
-# output
+# Get screen output
 output := screen.Display()
-
 ```
+For more usage examples, see example

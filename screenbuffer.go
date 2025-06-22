@@ -1,9 +1,9 @@
-package pkg
+package govterm
 
 type Savepoint struct {
 	Cursor    Cursor
-	G0Charset map[rune]rune
-	G1Charset map[rune]rune
+	G0Charset []rune
+	G1Charset []rune
 	Charset   int
 	Origin    bool
 	Wrap      bool
@@ -168,7 +168,6 @@ func (db *ScreenBuffer) GetValue(key int) StaticDefaultDict[int, Char] {
 
 func (db *ScreenBuffer) Set(key int, value StaticDefaultDict[int, Char]) {
 	db.Map[key] = &value
-	return
 }
 
 func (db *ScreenBuffer) Delete(key int) {

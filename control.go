@@ -1,4 +1,4 @@
-package _const
+package govterm
 
 const (
 	SP    = " "
@@ -26,6 +26,8 @@ const (
 	OSCC1 = "\x9d"
 	OSC   = OSCC0
 )
+
+var spByte = []string{BEL, BS, HT, LF, VT, FF, CR, SO, SI, ESC, CSIC1, NUL, DEL, OSCC1}
 
 const (
 	RegSP    = ` `

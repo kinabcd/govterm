@@ -1,10 +1,10 @@
-module github.com/veops/go-ansiterm
+module github.com/kinabcd/govterm
 
-go 1.21.3
+go 1.24.3
 
 require (
-	github.com/mattn/go-runewidth v0.0.15
-	golang.org/x/text v0.14.0
+	github.com/mattn/go-runewidth v0.0.16
+	golang.org/x/text v0.26.0
 )
 
-require github.com/rivo/uniseg v0.2.0 // indirect
+require github.com/rivo/uniseg v0.4.7 // indirect

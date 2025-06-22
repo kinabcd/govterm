@@ -1,12 +1,11 @@
-package _const
+package govterm
 
 import (
 	"strings"
 )
 
 var (
-	LAT1_MAP   map[rune]rune
-	VT100_MAP  map[rune]rune
+	LAT1Chars  = []rune{}
 	VT100Chars = []rune{
 		0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
 		0x0008, 0x0009, 0x000a, 0x000b, 0x000c, 0x000d, 0x000e, 0x000f,
@@ -42,7 +41,6 @@ var (
 		0x00f8, 0x00f9, 0x00fa, 0x00fb, 0x00fc, 0x00fd, 0x00fe, 0x00ff,
 	}
 
-	IBMPC_MAP  map[rune]rune
 	IBMPCChars = []rune{
 		0x0000, 0x263a, 0x263b, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022,
 		0x25d8, 0x25cb, 0x25d9, 0x2642, 0x2640, 0x266a, 0x266b, 0x263c,
@@ -77,7 +75,6 @@ var (
 		0x2261, 0x00b1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00f7, 0x2248,
 		0x00b0, 0x2219, 0x00b7, 0x221a, 0x207f, 0x00b2, 0x25a0, 0x00a0,
 	}
-	VAX42_MAP  map[rune]rune
 	VAX42Chars = []rune{
 		0x0000, 0x263a, 0x263b, 0x2665, 0x2666, 0x2663, 0x2660, 0x2022,
 		0x25d8, 0x25cb, 0x25d9, 0x2642, 0x2640, 0x266a, 0x266b, 0x263c,
@@ -112,41 +109,19 @@ var (
 		0x2261, 0x00b1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00f7, 0x2248,
 		0x00b0, 0x2219, 0x00b7, 0x221a, 0x207f, 0x00b2, 0x25a0, 0x00a0,
 	}
-	CHARMAPS = map[string]map[rune]rune{
-		"B": LAT1_MAP,
-		"0": VT100_MAP,
-		"U": IBMPC_MAP,
-		"V": VAX42_MAP,
+	CHARMAPS = map[string][]rune{
+		"B": LAT1Chars,
+		"0": VT100Chars,
+		"U": IBMPCChars,
+		"V": VAX42Chars,
 	}
 )
 
-func init() {
-	LAT1_MAP = make(map[rune]rune)
-	for i := 0; i < 256; i++ {
-		LAT1_MAP[rune(i)] += rune(i)
-	}
-
-	VT100_MAP = make(map[rune]rune)
-	for i, c := range VT100Chars {
-		VT100_MAP[rune(i)] = c
-	}
-
-	IBMPC_MAP = make(map[rune]rune)
-	for i, c := range IBMPCChars {
-		IBMPC_MAP[rune(i)] = c
-	}
-
-	VAX42Chars = make([]rune, 0)
-	for i, c := range VAX42Chars {
-		VAX42Chars[rune(i)] = c
-	}
-}
-
-func Translate(s string, m map[rune]rune) string {
+func Translate(s string, m []rune) string {
 	var sb strings.Builder
 	for _, c := range s {
-		if val, ok := m[c]; ok {
-			sb.WriteRune(val)
+		if int(c) < len(m) {
+			sb.WriteRune(m[int(c)])
 		} else {
 			sb.WriteRune(c)
 		}

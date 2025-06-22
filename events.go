@@ -1,7 +1,6 @@
-package ansiterm
+package govterm
 
 import "fmt"
-import . "github.com/veops/go-ansiterm/const"
 
 var (
 	Basic = map[string]struct{}{
@@ -60,38 +59,38 @@ var (
 func (s *Stream) HandleBasic(char string) {
 	switch char {
 	case BEL:
-		s.Listener.Bell()
+		s.screen.Bell()
 	case BS:
-		s.Listener.Backspace()
+		s.screen.Backspace()
 	case HT:
-		s.Listener.Tab()
+		s.screen.Tab()
 	case LF, VT, FF:
-		s.Listener.LineFeed()
+		s.screen.LineFeed()
 	case CR:
-		s.Listener.CarriageReturn()
+		s.screen.CarriageReturn()
 	case SO:
-		s.Listener.ShiftOut()
+		s.screen.ShiftOut()
 	case SI:
-		s.Listener.ShiftIn()
+		s.screen.ShiftIn()
 	}
 }
 
 func (s *Stream) HandleEscape(char string) {
 	switch char {
 	case RIS:
-		s.Listener.Reset()
+		s.screen.Reset()
 	case IND:
-		s.Listener.Index()
+		s.screen.Index()
 	case NEL:
-		s.Listener.LineFeed()
+		s.screen.LineFeed()
 	case RI:
-		s.Listener.ReverseIndex()
+		s.screen.ReverseIndex()
 	case HTS:
-		s.Listener.SetTabStop()
+		s.screen.SetTabStop()
 	case DECSC:
-		s.Listener.SaveCursor()
+		s.screen.SaveCursor()
 	case DECRC:
-		s.Listener.RestoreCursor()
+		s.screen.RestoreCursor()
 	}
 
 }
@@ -99,19 +98,14 @@ func (s *Stream) HandleEscape(char string) {
 func (s *Stream) HandleSharp(char string) {
 	switch char {
 	case DECALN:
-		s.Listener.AlignmentDisplay()
+		s.screen.AlignmentDisplay()
 	}
 }
 
 func tidyParams(param []int, num int) []int {
 	if len(param) < num {
 		var newParams = make([]int, num)
-		for i := 0; i < num; i++ {
-			newParams[i] = 0
-		}
-		for i, v := range param {
-			newParams[i] = v
-		}
+		copy(newParams, param)
 		return newParams
 	}
 	return param
@@ -121,66 +115,59 @@ func (s *Stream) HandleCSI(char string, params []int, kw map[string]any) {
 	param := tidyParams(params, 1)
 	switch char {
 	case ICH:
-		s.Listener.InsertCharacters(param[0])
+		s.screen.InsertCharacters(param[0])
 	case CUU:
-		s.Listener.CursorUp(param[0])
+		s.screen.CursorUp(param[0])
 	case CUD:
-		s.Listener.CursorDown(param[0])
+		s.screen.CursorDown(param[0])
 	case CUF, HPR:
-		s.Listener.CursorForward(param[0])
+		s.screen.CursorForward(param[0])
 	case CUB:
-		s.Listener.CursorBack(param[0])
+		s.screen.CursorBack(param[0])
 	case CNL:
-		s.Listener.CursorDown1(param[0])
+		s.screen.CursorDown1(param[0])
 	case CPL:
-		s.Listener.CursorUp1(param[0])
+		s.screen.CursorUp1(param[0])
 	case CHA, HPA:
-		s.Listener.CursorToColumn(param[0])
+		s.screen.CursorToColumn(param[0])
 	case CUP, HVP:
 		param = tidyParams(params, 2)
-		s.Listener.CursorPosition(param[0], param[1])
+		s.screen.CursorPosition(param[0], param[1])
 	case ED:
-		s.Listener.EraseInDisplay(param[0])
+		s.screen.EraseInDisplay(param[0])
 	case EL:
-		if v, ok := kw["private"]; ok {
-			switch v.(type) {
-			case bool:
-				s.Listener.EraseInLine(param[0], v.(bool))
-				return
-			}
-		}
-		s.Listener.EraseInLine(param[0], false)
+		s.screen.EraseInLine(param[0])
 	case IL:
-		s.Listener.InsertLines(param[0])
+		s.screen.InsertLines(param[0])
 	case DL:
-		s.Listener.DeleteLines(param[0])
+		s.screen.DeleteLines(param[0])
 	case DCH:
-		s.Listener.DeleteCharacters(param[0])
+		s.screen.DeleteCharacters(param[0])
 	case ECH:
-		s.Listener.EraseCharacters(param[0])
+		s.screen.EraseCharacters(param[0])
 	case DA, DSR:
 		req := map[string]bool{}
 		for k, v := range kw {
-			switch v.(type) {
+			switch v := v.(type) {
 			case bool:
-				req[k] = v.(bool)
+				req[k] = v
 			}
 		}
-		s.Listener.ReportDeviceAttributes(param[0], req)
+		s.screen.ReportDeviceAttributes(param[0], req)
 	case VPA:
-		s.Listener.CursorToLine(param[0])
+		s.screen.CursorToLine(param[0])
 	case VPR:
-		s.Listener.CursorDown(param[0])
+		s.screen.CursorDown(param[0])
 	case TBC:
-		s.Listener.ClearTabStop(param[0])
+		s.screen.ClearTabStop(param[0])
 	case SM:
-		s.Listener.SetMode(params, kw)
+		s.screen.SetMode(params, kw)
 	case RM:
-		s.Listener.ResetMode(params, kw)
+		s.screen.ResetMode(params, kw)
 	case SGR:
-		s.Listener.SelectGraphicRendition(params...)
+		s.screen.SelectGraphicRendition(params...)
 	case DECSTBM:
-		s.Listener.SetMargins(param[0], param[1])
+		s.screen.SetMargins(param[0], param[1])
 	default:
 		fmt.Println("Unsupport type:", char)
 	}

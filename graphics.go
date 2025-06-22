@@ -1,4 +1,4 @@
-package _const
+package govterm
 
 var TEXT = map[int]string{
 	1:  "+bold",

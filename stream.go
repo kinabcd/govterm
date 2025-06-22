@@ -1,15 +1,14 @@
-package ansiterm
+package govterm
 
 import (
+	"bytes"
 	"fmt"
-	"math"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
-
-	. "github.com/veops/go-ansiterm/const"
-	. "github.com/veops/go-ansiterm/pkg"
+	"unicode/utf8"
 )
 
 const (
@@ -30,17 +29,16 @@ const (
 )
 
 type Stream struct {
-	Listener        *Screen
-	Strict          bool
+	screen          *Screen
 	UseUTF8         bool
 	TakingPlainText bool
 	Basic           map[string]struct{}
 	Escape          map[string]struct{}
 	Sharp           map[string]struct{}
 	Csi             map[string]struct{}
-	//Events          map[string]struct{} // or []string
-	TextPattern *regexp.Regexp
-	parser      Parser
+	TextPattern     *regexp.Regexp
+
+	buf *bytes.Buffer
 }
 
 func generateTextPattern() (*regexp.Regexp, error) {
@@ -79,15 +77,13 @@ func generateTextPattern() (*regexp.Regexp, error) {
 	return regexp.Compile(pattern)
 }
 
-func initializeStream(screen *Screen, strict bool) *Stream {
+func NewStream(screen *Screen) *Stream {
 	textPattern, err := generateTextPattern()
 	if err != nil {
 		fmt.Println(err)
 	}
-
 	s := &Stream{
-		Listener:        nil,
-		Strict:          strict,
+		screen:          screen,
 		UseUTF8:         true,
 		TakingPlainText: false,
 		TextPattern:     textPattern,
@@ -95,194 +91,207 @@ func initializeStream(screen *Screen, strict bool) *Stream {
 		Escape:          Escape,
 		Sharp:           Sharp,
 		Csi:             Csi,
-	}
 
-	//if screen != nil {
-	//	s.Attach(screen)
-	//}
+		buf: &bytes.Buffer{},
+	}
 
 	return s
 }
 
-func (s *Stream) Attach(screen *Screen) {
-	s.Listener = screen
-	s.InitializeParser()
-}
-
-func (s *Stream) InitializeParser() {
-	s.parser = &MyParser{
-		CharChan: make(chan string, 2048),
-		IsPlain:  make(chan bool),
-	}
-	go s.parseFsm()
-	s.TakingPlainText = true
-	s.parser.Running()
-}
-
-func (s *Stream) Feed(data string) {
-	//matchText := s.TextPattern.MatchString
-	matchText := s.TextPattern.FindStringSubmatchIndex
-	takingPlainText := s.TakingPlainText
-	if s.Listener == nil {
+func (s *Stream) WriteString(data string) (n int, err error) {
+	n, err = s.buf.WriteString(data)
+	if s.screen == nil {
 		panic("Listener is nil")
 	}
-
-	length := len(data)
-	offset := 0
-	if !s.parser.Running() {
-		s.parser.Start()
-		s.parser.GetPlain()
-	}
-	for offset < length {
-		if takingPlainText {
-			matches := matchText(data[offset:])
-
-			if matches != nil && matches[0] == 0 {
-				start, end := matches[0]+offset, matches[1]+offset
-				s.Listener.Draw(data[start:end])
-				offset = end
-			} else {
-				takingPlainText = false
+	for {
+		if s.buf.Len() == 0 {
+			return
+		} else if sb := s.buf.String(); s.isFsm(sb) {
+			l, errFsm := s.processFsm(sb)
+			if errFsm != nil {
+				return
 			}
+			s.buf.Next(l)
 		} else {
-			if s.parser.Send(data[offset : offset+1]) {
-				takingPlainText = s.parser.GetPlain()
+			if s.UseUTF8 {
+				r, _, _ := s.buf.ReadRune()
+				if r == utf8.RuneError {
+					if s.buf.Len() >= 4 {
+						s.buf.UnreadRune()
+					}
+					return
+				}
+				s.screen.Draw(string(r))
 			} else {
-				s.InitializeParser()
+				b, _ := s.buf.ReadByte()
+				s.screen.Draw(string([]byte{b}))
 			}
-			offset++
 		}
 	}
-	s.TakingPlainText = takingPlainText
 }
 
-func (s *Stream) parseFsm() {
-	if s.Listener == nil {
-		panic("listener is nil")
+// return true if Fsm
+func (s *Stream) isFsm(sBuf string) bool {
+	for _, sp := range spByte {
+		if strings.HasPrefix(sBuf, sp) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Stream) processFsm(buf string) (l int, err error) {
+	if char := buf[0:1]; char == ESC {
+		if len(buf) < 2 {
+			return 0, io.EOF
+		} else if char2 := buf[1:2]; char2 == "[" {
+			l, err = s.processCSI(buf[2:])
+			return l + 2, err
+		} else if char2 == "]" {
+			l, err = s.processOSC(buf[2:])
+			return l + 2, err
+		} else {
+			if len(buf) < 3 {
+				return 0, io.EOF
+			}
+			char3 := buf[2:3]
+			if char2 == "#" {
+				s.HandleSharp(char3)
+			} else if char2 == "%" {
+				s.selectOtherCharset(char3)
+			} else if char2 == "(" || char2 == ")" {
+				if !s.UseUTF8 {
+					s.screen.defineCharset(char3, char2)
+				}
+			} else {
+				return 1, nil
+			}
+			return 3, nil
+		}
+	} else if _, ok := s.Basic[char]; ok {
+		if (char == SI || char == SO) && s.UseUTF8 {
+		} else {
+			s.HandleBasic(char)
+		}
+		return 1, nil
+	} else if char == CSIC1 {
+		l, err = s.processCSI(buf[1:])
+		return l + 1, err
+	} else if char == OSCC1 {
+		l, err = s.processOSC(buf[1:])
+		return l + 1, err
+	} else if char == NUL || char == DEL {
+		s.screen.Draw(char)
+		return 1, nil
+	} else {
+		return 1, nil
+	}
+}
+
+func (s *Stream) processCSI(buf string) (l int, err error) {
+	var params []int
+	current := ""
+	private := false
+	AllowedInCsi := BEL + BS + HT + LF + VT + FF + CR
+	SpOrGt := SP + ">"
+	CanOrSub := CAN + SUB
+	var basicQueue = []string{}
+	doBasic := func() {
+		for _, char := range basicQueue {
+			s.HandleBasic(char)
+		}
 	}
 
-	SpOrGt := SP + ">"
-	NulOrDel := NUL + DEL
-	CanOrSub := CAN + SUB
-	AllowedInCsi := BEL + BS + HT + LF + VT + FF + CR
+	for {
+		if len(buf) == 0 {
+			return 0, io.EOF
+		}
+		char := buf[0:1]
+		buf = buf[1:]
+		l += 1
+		if char == "?" {
+			private = true
+		} else if strings.Contains(AllowedInCsi, char) {
+			basicQueue = append(basicQueue, char)
+		} else if strings.Contains(SpOrGt, char) {
+		} else if strings.Contains(CanOrSub, char) {
+			doBasic()
+			s.screen.Draw(char)
+			return l, nil
+		} else if unicode.IsDigit(rune(char[0])) {
+			current += char
+		} else if char == "$" {
+			doBasic()
+			return l, nil
+		} else {
+			num, _ := strconv.Atoi(current)
+			params = append(params, min(num, 9999))
+			if char == ";" {
+				current = ""
+			} else {
+				doBasic()
+				if private {
+					s.HandleCSI(char, params, map[string]any{"private": true})
+				} else {
+					s.HandleCSI(char, params, nil)
+				}
+				return l, nil
+			}
+		}
+	}
+
+}
+func (s *Stream) processOSC(buf string) (l int, err error) {
 	OscTermINATORS := map[string]struct{}{
 		STC0: {},
 		STC1: {},
 		BEL:  {},
 	}
+	if len(buf) == 0 {
+		return 0, io.EOF
+	}
+	code := buf[0:1]
+	switch code {
+	case "R", "P":
+		return 1, nil
+	}
+	buf = buf[1:]
+	l += 1
 
-	var char string
-	defer func() {
-		s.parser.Close()
-	}()
+	param := ""
 	for {
-		s.parser.SetPlain(true)
-		char = s.parser.Next()
-		if char == ESC {
-			s.parser.SetPlain(false)
-
-			char = s.parser.Next()
-			if char == "[" {
-				char = CSIC1
-			} else if char == "]" {
-				char = OSCC1
-			} else {
-				if char == "#" {
-					s.parser.SetPlain(false)
-					s.HandleSharp(s.parser.Next())
-				} else if char == "%" {
-					s.parser.SetPlain(false)
-					s.selectOtherCharset(s.parser.Next())
-				} else if char == "(" || char == ")" {
-					s.parser.SetPlain(false)
-					code := s.parser.Next()
-					if s.UseUTF8 {
-						continue
-					}
-					s.Listener.defineCharset(code, char)
-				} else {
-					s.HandleEscape(char)
-					s.HandleEscape(char)
-				}
-				continue
-			}
+		if len(buf) == 0 {
+			return 0, io.EOF
 		}
-		if _, ok := s.Basic[char]; ok {
-			if (char == SI || char == SO) && s.UseUTF8 {
-				continue
-			}
-			s.HandleBasic(char)
-		} else if char == CSIC1 {
-			var params []int
-			current := ""
-			private := false
-			for {
-				s.parser.SetPlain(false)
-				char = s.parser.Next()
-				if char == "?" {
-					private = true
-				} else if strings.Contains(AllowedInCsi, char) {
-					s.HandleBasic(char)
-				} else if strings.Contains(SpOrGt, char) {
-				} else if strings.Contains(CanOrSub, char) {
-					s.Listener.Draw(char)
-					break
-				} else if unicode.IsDigit(rune(char[0])) {
-					current += char
-				} else if char == "$" {
-					s.parser.SetPlain(false)
-					char = s.parser.Next()
-					break
-				} else {
-					num, _ := strconv.Atoi(current)
-					params = append(params, int(math.Min(float64(num), 9999)))
-					if char == ";" {
-						current = ""
-					} else {
-						if private {
-							s.HandleCSI(char, params, map[string]any{"private": true})
-						} else {
-							s.HandleCSI(char, params, nil)
-						}
-						break
-					}
-				}
-			}
-		} else if char == OSCC1 {
-			s.parser.SetPlain(false)
-			code := s.parser.Next()
-			switch code {
-			case "R", "P":
-				continue
-			}
-			param := ""
-			for {
-				s.parser.SetPlain(false)
-				char = s.parser.Next()
-				if char == ESC {
-					s.parser.SetPlain(false)
-					char += s.parser.Next()
-				}
-				if _, ok := OscTermINATORS[char]; ok {
-					break
-				} else {
-					param += char
-				}
-			}
-			param = param[:1]
-			if strings.Contains("01", code) {
-				s.Listener.setIconName(param)
-			}
-			if strings.Contains("02", code) {
-				s.Listener.setTitle(param)
-			}
-		} else if strings.Contains(NulOrDel, char) {
-			s.Listener.Draw(char)
+		char := buf[0:1]
+		buf = buf[1:]
+		l += 1
+
+		if char == ESC {
+			char += buf[0:1]
+			buf = buf[1:]
+			l += 1
+		}
+		if _, ok := OscTermINATORS[char]; ok {
+			break
+		} else {
+			param += char
 		}
 	}
-
+	param = param[:1]
+	if strings.Contains("01", code) {
+		s.screen.setIconName(param)
+	}
+	if strings.Contains("02", code) {
+		s.screen.setTitle(param)
+	}
+	return
 }
 
 func (s *Stream) selectOtherCharset(code string) {
-
+	if code == "@" {
+		s.UseUTF8 = false
+	} else if strings.Contains("G8", code) {
+		s.UseUTF8 = true
+	}
 }

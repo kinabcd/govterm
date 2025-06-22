@@ -1,4 +1,4 @@
-package _const
+package govterm
 
 const (
 	// Basic control sequences

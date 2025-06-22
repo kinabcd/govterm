@@ -1,10 +1,8 @@
-package ansiterm
+package govterm
 
 import (
-	"fmt"
-	"strings"
-
-	. "github.com/veops/go-ansiterm/pkg"
+	"bytes"
+	"unicode/utf8"
 )
 
 type ByteStream struct {
@@ -12,34 +10,46 @@ type ByteStream struct {
 	utf8Decoder func(data []byte) (string, error)
 }
 
-func (b *ByteStream) Feed(data []byte) {
-	var err error
+func (b *ByteStream) Write(data []byte) (n int, err error) {
 	var dataStr string
 	if b.UseUTF8 {
 		dataStr, err = b.utf8Decoder(data)
 		if err != nil {
-			fmt.Println(err)
+			return 0, err
 		}
 	} else {
 		dataStr = BytesToString(data)
 	}
-	b.Stream.Feed(dataStr)
-
+	b.Stream.WriteString(dataStr)
+	return len(data), nil
 }
 
-func (b *ByteStream) selectOtherCharset(code string) {
-	if code == "@" {
-		b.UseUTF8 = false
-	} else if strings.Contains("G8", code) {
-		b.UseUTF8 = true
-	}
-}
-
-func InitByteStream(screen *Screen, strict bool) *ByteStream {
-	stream := initializeStream(screen, strict)
+func NewByteStream(stream *Stream) *ByteStream {
 	bs := &ByteStream{
 		Stream:      stream,
 		utf8Decoder: DecodeUTF8WithReplacement,
 	}
 	return bs
+}
+
+func BytesToString(data []byte) string {
+	var result string
+	for _, b := range data {
+		result += string(b)
+	}
+	return result
+}
+func DecodeUTF8WithReplacement(data []byte) (string, error) {
+	var output bytes.Buffer
+	for len(data) > 0 {
+		r, size := utf8.DecodeRune(data)
+		if r == utf8.RuneError && size == 1 {
+			output.WriteRune('\uFFFD')
+			data = data[size:]
+		} else {
+			output.WriteRune(r)
+			data = data[size:]
+		}
+	}
+	return output.String(), nil
 }
